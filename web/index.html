@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mini-GPT Live · Custom Transformer from Scratch</title>
+  <link rel="stylesheet" href="/web/style.css" />
+  <script src="https://d3js.org/d3.v7.min.js" defer></script>
+  <script src="/web/app.js" defer></script>
+</head>
+<body>
+
+  <header>
+    <div class="title">
+      <h1>Mini-GPT <span class="accent">Live</span></h1>
+      <p class="subtitle">3.17M-param decoder-only transformer · trained from scratch on Tiny Shakespeare</p>
+    </div>
+    <div class="header-right">
+      <button id="helpBtn" class="help-btn" title="How to use">? How to use</button>
+      <div class="model-info" id="modelInfo">loading…</div>
+    </div>
+  </header>
+
+  <section class="controls">
+    <div class="row">
+      <label class="grow">
+        <span>Prompt</span>
+        <input id="prompt" type="text" value="ROMEO:" maxlength="100" />
+      </label>
+      <button id="generateBtn">Generate</button>
+      <button id="stopBtn" disabled>Stop</button>
+    </div>
+
+    <div class="row sliders">
+      <label>
+        <span>Tokens <em id="maxNewVal">200</em></span>
+        <input id="maxNew" type="range" min="20" max="600" step="20" value="200" />
+      </label>
+      <label>
+        <span>Temperature <em id="tempVal">0.80</em></span>
+        <input id="temp" type="range" min="0.1" max="1.5" step="0.05" value="0.8" />
+      </label>
+      <label>
+        <span>Top-k <em id="topKVal">0</em></span>
+        <input id="topK" type="range" min="0" max="65" step="1" value="0" />
+      </label>
+      <label>
+        <span>Speed <em id="delayVal">20</em>ms</span>
+        <input id="delay" type="range" min="0" max="200" step="5" value="20" />
+      </label>
+    </div>
+  </section>
+
+  <main>
+
+    <section class="panel">
+      <h2>Attention Heatmap
+        <span class="hint">last layer · averaged across heads · row = each new token's attention</span>
+      </h2>
+      <div id="heatmap" class="viz"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Next-Token Probabilities
+        <span class="hint">model's top-10 predictions before each character is sampled</span>
+      </h2>
+      <div id="probs" class="viz"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Generated Text
+        <span class="hint" id="genStatus">idle</span>
+      </h2>
+      <pre id="output"><span class="cursor">▍</span></pre>
+    </section>
+
+  </main>
+
+  <footer>
+    <span>Built from scratch · PyTorch · D3 · FastAPI · SSE</span>
+  </footer>
+
+  <!-- ── Help Modal ──────────────────────────────────────────────────── -->
+  <div id="helpOverlay" class="help-overlay" hidden>
+    <div class="help-modal" role="dialog" aria-labelledby="helpTitle">
+      <button class="help-close" id="helpCloseBtn" aria-label="Close">×</button>
+      <h2 id="helpTitle">How to Use Mini-GPT Live</h2>
+
+      <p class="help-lede">
+        This is a 3.17M-parameter decoder-only transformer built from scratch in PyTorch and trained on
+        Tiny Shakespeare. It generates one character at a time. Watch the visualizations to see what the
+        model is "thinking" before each character is sampled.
+      </p>
+
+      <h3>1 · Set your prompt</h3>
+      <p>The model only knows Shakespeare text, so prompts that match its training distribution work best:</p>
+      <ul class="help-prompts">
+        <li><code>ROMEO:</code> &nbsp;<code>JULIET:</code> &nbsp;<code>HAMLET:</code> &nbsp;<code>FALSTAFF:</code> — character speakers</li>
+        <li><code>To be, or not to be,</code> &nbsp;<code>All the world's a</code> — famous line continuations</li>
+        <li><code>Enter ROMEO and JULIET</code> &nbsp;<code>SCENE I.</code> — stage directions</li>
+      </ul>
+      <p class="help-tip">Tip: press <kbd>Enter</kbd> in the prompt box to generate.</p>
+
+      <h3>2 · Tune the sliders</h3>
+      <table class="help-table">
+        <tr><th>Tokens</th>      <td>How many characters to generate. 200 is a good default; 500+ for full scenes.</td></tr>
+        <tr><th>Temperature</th> <td><b>Lower = safer, higher = more creative.</b><br>
+                                     <code>0.3</code> = deterministic, often repetitive. <code>0.8</code> = balanced default.
+                                     <code>1.2+</code> = chaotic, may break grammar.</td></tr>
+        <tr><th>Top-k</th>       <td>Restricts sampling to the <code>k</code> most likely characters. <code>0</code> = disabled (sample from full distribution).
+                                     Try <code>10–40</code> to filter out unlikely garbage.</td></tr>
+        <tr><th>Speed</th>       <td>Delay between tokens in milliseconds. Set to <code>80–150ms</code> to actually watch the model think.
+                                     <code>0</code> = generate as fast as the GPU allows.</td></tr>
+      </table>
+
+      <h3>3 · Read the visualizations</h3>
+
+      <h4>Attention Heatmap (top-left)</h4>
+      <p>
+        Each <b>row</b> represents a generated token. Each <b>column</b> represents a position in the context
+        window. Cell brightness = how strongly that new token attended to that earlier position when it was
+        being predicted.
+      </p>
+      <p>What to look for:</p>
+      <ul>
+        <li><b>Diagonal pattern</b> — model is mostly looking at recent characters (local context)</li>
+        <li><b>Bright vertical stripes</b> — model is anchored to specific earlier tokens (e.g. line breaks, character names)</li>
+        <li><b>Scattered/broad rows</b> — model is uncertain or doing complex reasoning</li>
+      </ul>
+
+      <h4>Next-Token Probabilities (top-right)</h4>
+      <p>
+        The 10 most likely characters the model considered <em>before</em> sampling. The bar in
+        <span style="color:var(--good)">green</span> is the one that was actually chosen.
+      </p>
+      <p>What to look for:</p>
+      <ul>
+        <li><b>One huge bar near 100%</b> — model is very confident (e.g. predicting <code>T</code> after <code>JULIE</code>)</li>
+        <li><b>Several balanced bars</b> — model is at a decision point (e.g. start of a new word)</li>
+        <li><b>Flat distribution</b> — model is uncertain; output quality may dip</li>
+      </ul>
+
+      <h4>Generated Text (bottom)</h4>
+      <p>
+        Streamed character-by-character. Your prompt is shown in <span style="color:var(--accent)">purple</span>;
+        each new character flashes briefly as it arrives.
+      </p>
+
+      <h3>4 · Recommended first run</h3>
+      <ol>
+        <li>Prompt: <code>JULIET:</code></li>
+        <li>Tokens: <code>200</code></li>
+        <li>Temperature: <code>0.8</code></li>
+        <li>Top-k: <code>0</code> (off)</li>
+        <li>Speed: <code>100ms</code></li>
+        <li>Click <b>Generate</b> and watch the heatmap grow.</li>
+      </ol>
+      <p class="help-tip">
+        Then try the same prompt at <code>temperature=0.3</code> and <code>1.2</code> to see how the
+        probability distribution shape changes — sharper at low temp, flatter at high temp.
+      </p>
+
+      <h3>What this is <em>not</em></h3>
+      <p>
+        This is a 3M-param char-level model trained for 30 minutes on a single book's worth of text. It will
+        invent words that <em>sound</em> Shakespearean but aren't real. That's expected — it learned the
+        <em>style</em>, not a vocabulary. For comparison, GPT-2 small is 117M params trained on 40GB of text.
+      </p>
+
+      <p class="help-footer">Press <kbd>Esc</kbd> or click outside this box to close.</p>
+    </div>
+  </div>
+
+</body>
+</html>

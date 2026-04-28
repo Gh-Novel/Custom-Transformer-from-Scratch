@@ -1,0 +1,30 @@
+# Study material — local only
+doc/
+
+# Secrets — never commit
+token.txt
+*.token
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# Data & model artifacts
+data/
+checkpoints/
+logs/
+
+# Environments
+.env
+venv/
+.venv/
+*.egg-info/
+dist/
+build/
+
+# macOS
+.DS_Store

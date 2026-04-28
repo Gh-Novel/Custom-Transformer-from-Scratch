@@ -1,6 +1,3 @@
-# Study material — local only
-doc/
-
 # Secrets — never commit
 token.txt
 *.token

@@ -27,7 +27,7 @@ This Space serves a real-time visualization: watch generated text stream out cha
 | Training | 10,000 steps, val loss = 1.317 |
 
 ## What's shown
-- You can test it here : https://huggingface.co/spaces/NoobNovel/mini-gpt-live
+- You can test it here : https://huggingface.co/spaces/novelkathor/mini-gpt-live
 - **Attention heatmap** — last layer, averaged across heads. Each row is a generated token; each column a position in the context window.
 - **Next-token probabilities** — top-10 candidates the model considered before sampling each character.
 - **Generated text** — streamed live via Server-Sent Events.
